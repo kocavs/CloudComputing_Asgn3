@@ -1,0 +1,29 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+    commands:
+      - echo "Installing dependencies..."
+
+  pre_build:
+    commands:
+      - echo "Running pre-build commands..."
+
+  build:
+    commands:
+      - echo "Building index_photos Lambda function"
+      - cd lambda/index_photos
+      - zip -r9 ../../index_photos.zip -x *index-photos.yaml
+      - cd ../..
+      
+      - echo "Building search_photos Lambda function"
+      - cd lambda/search_photos
+      - zip -r9 ../../search_photos.zip -x *search-photos.yaml
+      - cd ../..
+
+artifacts:
+  files:
+    - index_photos.zip
+    - search_photos.zip
