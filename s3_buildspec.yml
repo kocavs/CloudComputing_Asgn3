@@ -14,4 +14,3 @@ phases:
 artifacts:
   files:
     - 'frontend/**/*'
-  base-directory: 'frontend'
