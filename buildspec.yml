@@ -27,3 +27,4 @@ artifacts:
   files:
     - index_photos.zip
     - search_photos.zip
+    - dev_lambda.yml
