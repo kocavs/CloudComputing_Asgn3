@@ -15,12 +15,12 @@ phases:
     commands:
       - echo "Building index_photos Lambda function"
       - cd lambda/index_photos
-      - zip -r9 ../../index_photos.zip -x *index-photos.yaml
+      - zip -r9 ../../index_photos.zip lambda_function.py
       - cd ../..
       
       - echo "Building search_photos Lambda function"
       - cd lambda/search_photos
-      - zip -r9 ../../search_photos.zip -x *search-photos.yaml
+      - zip -r9 ../../search_photos.zip search-photos-pkg
       - cd ../..
 
 artifacts:
