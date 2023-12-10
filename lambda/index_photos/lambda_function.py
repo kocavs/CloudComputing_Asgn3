@@ -12,7 +12,7 @@ service = 'es'
 s3_client = boto3.client('s3', region_name=region)
 rekognition = boto3.client('rekognition', region_name=region)
 
-# Elasticsearch domain (only the domain part, without https://)
+# Elasticsearch domain 
 es_host = 'search-photosv1-rzclcadspe6lrgsf7j4xpf5cie.us-east-1.es.amazonaws.com' 
 # Elasticsearch credentials
 es_username = 'admin'

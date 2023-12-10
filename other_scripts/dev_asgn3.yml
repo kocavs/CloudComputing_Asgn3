@@ -1,0 +1,294 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation Template to create all services in assignment3
+
+Resources:
+  MyOpensearchDomain:
+    Type: "AWS::OpenSearchService::Domain"
+    Properties:
+      DomainName: "cf-photos"
+      AdvancedSecurityOptions:
+        Enabled: true
+        InternalUserDatabaseEnabled: true
+        MasterUserOptions:
+          MasterUserName: 'master'
+          MasterUserPassword: 'Master@123'
+        AnonymousAuthEnabled: False
+      ClusterConfig:
+        InstanceType: 't3.small.search'
+        InstanceCount: 1
+        DedicatedMasterEnabled: False
+        ZoneAwarenessEnabled: False
+        WarmEnabled: False
+      CognitoOptions:
+        Enabled: False
+      DomainEndpointOptions:
+        EnforceHTTPS: True
+        TLSSecurityPolicy: Policy-Min-TLS-1-0-2019-07
+        CustomEndpointEnabled: False
+      EBSOptions:
+        EBSEnabled: true
+        VolumeSize: 10  # Specify your desired volume size in GB
+        VolumeType: "gp2"
+      SnapshotOptions:
+        AutomatedSnapshotStartHour: 0
+      EncryptionAtRestOptions:
+        Enabled: true
+      NodeToNodeEncryptionOptions:
+        Enabled: true
+  PhotoStoreS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: cf-photos-asgn3
+      PublicAccessBlockConfiguration: 
+        BlockPublicAcls: False
+        BlockPublicPolicy: False
+        IgnorePublicAcls: False
+        RestrictPublicBuckets: False
+  PhotoStorePolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    DeletionPolicy: Delete
+    Properties:
+      Bucket: !Ref PhotoStoreS3Bucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect: 'Allow'
+          Principal: '*'
+          Action: 
+            - 's3:GetObject'
+            - 's3:PutObject'
+          Resource: !Sub 'arn:aws:s3:::${PhotoStoreS3Bucket}/*'
+  FrontendStoreS3Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties:
+      BucketName: cf-frontend-asgn3
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: error.html
+      PublicAccessBlockConfiguration: 
+        BlockPublicAcls: False
+        BlockPublicPolicy: False
+        IgnorePublicAcls: False
+        RestrictPublicBuckets: False
+  FrontendStorePolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    DeletionPolicy: Delete
+    Properties:
+      Bucket: !Ref FrontendStoreS3Bucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect: 'Allow'
+          Principal: '*'
+          Action: 's3:GetObject'
+          Resource: !Sub 'arn:aws:s3:::${FrontendStoreS3Bucket}/*'
+  IndexLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    DeletionPolicy: Delete
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: LambdaRekognitionAndOpenSearchPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rekognition:*
+                  - es:ESHttp*
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt PhotoStoreS3Bucket.Arn
+                  - !Sub '${PhotoStoreS3Bucket.Arn}/*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:*
+  IndexPhotoLambdaFunction:
+    Type: AWS::Lambda::Function
+    DeletionPolicy: Delete
+    Properties:
+      Code:
+        S3Bucket: hw3-lambda-funcs
+        S3Key: index_photos.zip      
+      Handler: lambda_function.lambda_handler 
+      Role: !GetAtt IndexLambdaExecutionRole.Arn
+      Runtime: python3.11  
+      Timeout: 30
+  IndexLambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    DeletionPolicy: Delete
+    Properties:
+      FunctionName: !Ref IndexPhotoLambdaFunction
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: !GetAtt PhotoStoreS3Bucket.Arn
+  ApiGatewayS3Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ApiGatewayS3AccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                Resource: !Sub 'arn:aws:s3:::${PhotoStoreS3Bucket}/*'
+  SmartPhotoRestApi:
+    Type: AWS::ApiGateway::RestApi
+    DeletionPolicy: Delete
+    Properties:
+      EndpointConfiguration: 'REGIONAL'
+      BinaryMediaTypes: ["*/*"]
+      Name: "AI Photo Search"
+      Description: "AI Photo Search application, built during the Cloud and Big Data course at Columbia University."
+  SmartPhotoRestApiUploadResource:
+    Type: AWS::ApiGateway::Resource
+    DependsOn: SmartPhotoRestApi
+    DeletionPolicy: Delete
+    Properties:
+      RestApiId: !Ref SmartPhotoRestApi
+      ParentId: !GetAtt
+        - SmartPhotoRestApi
+        - RootResourceId
+      PathPart: "upload"
+  SmartPhotoRestApiSearchResource:
+    Type: AWS::ApiGateway::Resource
+    DependsOn: SmartPhotoRestApi
+    DeletionPolicy: Delete
+    Properties:
+      RestApiId: !Ref SmartPhotoRestApi
+      ParentId: !GetAtt
+        - SmartPhotoRestApi
+        - RootResourceId
+      PathPart: "search"
+  SmartPhotoRestApiPutRequest:
+    Type: AWS::ApiGateway::Method
+    DependsOn: SmartPhotoRestApiUploadResource
+    DeletionPolicy: Delete
+    Properties:
+      ApiKeyRequired: False
+      AuthorizationType: NONE
+      HttpMethod: PUT
+      Integration:
+        Type: AWS
+        Credentials: !GetAtt ApiGatewayS3Role.Arn
+        IntegrationHttpMethod: PUT
+        IntegrationResponses:
+          - StatusCode: 200
+        RequestParameters:
+          integration.request.path.bucket: method.request.header.bucket
+          integration.request.path.key: method.request.header.key
+          integration.request.header.x-amz-meta-customLabels: method.request.header.x-amz-meta-customLabels
+        Uri: arn:aws:apigateway:us-east-1:s3:path/{bucket}/{key}
+      MethodResponses:
+        - StatusCode: 200
+        - StatusCode: 403
+        - StatusCode: 500
+      OperationName: "/upload"
+      RequestParameters:
+        method.request.header.bucket: True
+        method.request.header.key: True
+        method.request.header.x-amz-meta-customLabels: True
+      ResourceId: !Ref SmartPhotoRestApiUploadResource
+      RestApiId: !Ref SmartPhotoRestApi
+  SmartPhotoRestApiGetRequest:
+    Type: AWS::ApiGateway::Method
+    DependsOn: SmartPhotoRestApiSearchResource
+    DeletionPolicy: Delete
+    Properties:
+      ApiKeyRequired: False
+      AuthorizationType: NONE
+      HttpMethod: GET
+      Integration:
+        Type: AWS
+        IntegrationHttpMethod: GET
+        IntegrationResponses:
+          - StatusCode: 200
+        RequestTemplates:
+          "application/json": "{\"q\": \"$input.params('q')\"}"
+        Uri: !Sub
+          - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations
+          - lambdaArn: !GetAtt SearchPhotosLambda.Arn
+      MethodResponses:
+        - StatusCode: 200
+        - StatusCode: 403
+        - StatusCode: 500
+      OperationName: "/search"
+      RequestParameters:
+        method.request.querystring.q: True
+      ResourceId: !Ref SmartPhotoRestApiSearchResource
+      RestApiId: !Ref SmartPhotoRestApi
+  SmartPhotoRestApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DeletionPolicy: Delete
+    DependsOn:
+      - SmartPhotoRestApiPutRequest
+      - SmartPhotoRestApiGetRequest
+    Properties:
+      RestApiId: !Ref SmartPhotoRestApi
+      StageName: PROD
+  SearchPhotosLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: hw3-lambda-funcs
+        S3Key: search_photos.zip  
+      Handler: lambda_function.handler 
+      Role: !GetAtt SearchLambdaExecutionRole.Arn
+      Runtime: python3.11
+      Timeout: 30
+  SearchLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+      - PolicyName: LambdaLexFullAccessPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - lex:PostContent
+                - lex:PostText
+                - lex:PutSession
+                - lex:GetSession
+                - lex:DeleteSession
+                - lex:RecognizeText
+                - lex:RecognizeUtterance
+                - lex:StartConversation
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: arn:aws:logs:*:*:*
