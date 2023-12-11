@@ -20,8 +20,8 @@ phases:
       - cd ../..
       
       - echo "Building search_photos Lambda function"
-      - cd lambda/search_photos
-      - zip -r9 ../../search_photos.zip search-photos-pkg
+      - cd lambda/search_photos/search-photos-pkg
+      - zip -r9 ../../search_photos.zip *
       - cd ../..
   post_build:
     commands:
