@@ -6,6 +6,7 @@ phases:
       python: 3.11
     commands:
       - echo "Installing dependencies..."
+      - pip install awscli
 
   pre_build:
     commands:
@@ -22,7 +23,12 @@ phases:
       - cd lambda/search_photos
       - zip -r9 ../../search_photos.zip search-photos-pkg
       - cd ../..
-
+  post_build:
+    commands:
+      - echo "Updating lambda Funtion..."
+      - aws lambda update-function-code --function-name index_photos --zip-file fileb://index_photos.zip
+      - aws lambda update-function-code --function-name search_photos --zip-file fileb://search_photos.zip
+      - echo "DONE!"
 artifacts:
   files:
     - index_photos.zip
