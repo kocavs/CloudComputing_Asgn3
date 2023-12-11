@@ -21,8 +21,8 @@ phases:
       
       - echo "Building search_photos Lambda function"
       - cd lambda/search_photos/search-photos-pkg
-      - zip -r9 ../../search_photos.zip *
-      - cd ../..
+      - zip -r9 ../../../search_photos.zip *
+      - cd ../../..
   post_build:
     commands:
       - echo "Updating lambda Funtion..."
